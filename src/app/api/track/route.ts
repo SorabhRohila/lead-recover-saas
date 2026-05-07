@@ -40,16 +40,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No registered website found." }, { status: 403, headers: corsHeaders });
     }
 
-    // 2. SECURITY CHECK: Ensure the domains match exactly!
-    // This extracts just "yourwebsite.com" from the URLs and compares them
-    const registeredDomain = new URL(activePage.url.startsWith('http') ? activePage.url : `https://${activePage.url}`).hostname;
-    const incomingDomain = new URL(source_url.startsWith('http') ? source_url : `https://${source_url}`).hostname;
+        // 2. SECURITY CHECK: Ensure the EXACT pages match!
+    const registered = new URL(activePage.url.startsWith('http') ? activePage.url : `https://${activePage.url}`);
+    const incoming = new URL(source_url.startsWith('http') ? source_url : `https://${source_url}`);
 
-    if (registeredDomain !== incomingDomain && incomingDomain !== "localhost") {
-      console.log(`Blocked: Registered ${registeredDomain} but received from ${incomingDomain}`);
+    // Combine the domain and the page path (e.g., "cpstests.io/lr.php")
+    const registeredFull = registered.hostname + registered.pathname;
+    const incomingFull = incoming.hostname + incoming.pathname;
+
+    if (registeredFull !== incomingFull && incoming.hostname !== "localhost") {
+      console.log(`Blocked: Registered ${registeredFull} but received from ${incomingFull}`);
       return NextResponse.json({ error: "Unauthorized website." }, { status: 403, headers: corsHeaders });
     }
-
             // 3. Domains match! Bulletproof Upsert Logic
     const sessionId = data.lr_session_id;
     let existingLeadId = null;
