@@ -11,6 +11,23 @@
     
     function sendPayload() {
         if (Object.keys(formData).length === 0) return;
+
+        // --- THE GATEKEEPER ---
+        // Check if we have at least a name AND a phone/email
+        let hasName = false;
+        let hasContact = false;
+
+        for (let key in formData) {
+            let k = key.toLowerCase();
+            if (k.includes('name') || k.includes('first') || k.includes('last')) hasName = true;
+            if (k.includes('phone') || k.includes('tel') || k.includes('email') || k.includes('number')) hasContact = true;
+        }
+
+        // If minimum requirements are not met, DO NOT send to database
+        if (!hasName || !hasContact) {
+            return; 
+        }
+        // ----------------------
         
         const payload = JSON.stringify({
             client_id: clientId,
@@ -18,7 +35,6 @@
             data: formData
         });
 
-        // Try beacon first for reliability when tab closes
         const beaconSent = navigator.sendBeacon("https://leadrecover.vercel.app/api/track", payload);
         
         if (!beaconSent) {
@@ -36,7 +52,7 @@
             const value = e.target.value.trim();
             if (value.length > 0) {
                 formData[name] = value;
-                sendPayload(); // Immediately fire the track request
+                sendPayload();
             }
         }
     }, true);
