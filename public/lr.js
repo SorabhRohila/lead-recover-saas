@@ -1,13 +1,12 @@
 (function() {
     const currentScript = document.currentScript;
     const clientId = currentScript ? currentScript.getAttribute('data-account') : null;
-    
-    // Generate a unique tag for this user's visit
     const sessionId = Date.now().toString() + Math.random().toString().substr(2);
     
     if (!clientId) return;
 
     let formData = {};
+    let lastSentData = ""; // <--- NEW: Remembers what was just sent
     
     function sendPayload() {
         if (Object.keys(formData).length === 0) return;
@@ -23,8 +22,13 @@
 
         if (!hasName || !hasContact) return; 
         
-        // Sneak the session ID into the data
         formData['lr_session_id'] = sessionId;
+        
+        // --- PREVENT RACE CONDITION ---
+        const currentDataString = JSON.stringify(formData);
+        if (currentDataString === lastSentData) return; // Abort if identical to last ping
+        lastSentData = currentDataString;
+        // ------------------------------
 
         const payload = JSON.stringify({
             client_id: clientId,
