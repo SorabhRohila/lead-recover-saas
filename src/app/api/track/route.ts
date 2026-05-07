@@ -49,17 +49,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized website." }, { status: 403, headers: corsHeaders });
     }
 
-    // 3. Domains match! Save to Supabase
-    const { error } = await supabase.from('leads').insert([
-      {
+        // 3. Domains match! Smart Upsert Logic
+    const sessionId = data.lr_session_id;
+    let existingLeadId = null;
+
+    // Check if this specific user session already started a lead
+    if (sessionId) {
+      const { data: existing } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('user_id', client_id)
+        .contains('form_data', { lr_session_id: sessionId })
+        .single();
+        
+      if (existing) {
+        existingLeadId = existing.id;
+      }
+    }
+
+    if (existingLeadId) {
+      // It exists! UPDATE the existing row
+      const { error } = await supabase.from('leads')
+        .update({ phone_number: phone, form_data: data })
+        .eq('id', existingLeadId);
+      if (error) throw error;
+    } else {
+      // First time! INSERT a new row
+      const { error } = await supabase.from('leads').insert([{
         user_id: client_id,
         source_url: source_url,
         phone_number: phone, 
         form_data: data
-      }
-    ]);
-
-    if (error) throw error;
+      }]);
+      if (error) throw error;
+    }
 
     // 4. Push to Google Sheets (if connected)
     if (activePage.google_sheet_id && process.env.GOOGLE_PRIVATE_KEY) {

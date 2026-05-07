@@ -2,18 +2,16 @@
     const currentScript = document.currentScript;
     const clientId = currentScript ? currentScript.getAttribute('data-account') : null;
     
-    if (!clientId) {
-        console.error("LeadRecover: Missing data-account ID");
-        return;
-    }
+    // Generate a unique tag for this user's visit
+    const sessionId = Date.now().toString() + Math.random().toString().substr(2);
+    
+    if (!clientId) return;
 
     let formData = {};
     
     function sendPayload() {
         if (Object.keys(formData).length === 0) return;
 
-        // --- THE GATEKEEPER ---
-        // Check if we have at least a name AND a phone/email
         let hasName = false;
         let hasContact = false;
 
@@ -23,12 +21,11 @@
             if (k.includes('phone') || k.includes('tel') || k.includes('email') || k.includes('number')) hasContact = true;
         }
 
-        // If minimum requirements are not met, DO NOT send to database
-        if (!hasName || !hasContact) {
-            return; 
-        }
-        // ----------------------
+        if (!hasName || !hasContact) return; 
         
+        // Sneak the session ID into the data
+        formData['lr_session_id'] = sessionId;
+
         const payload = JSON.stringify({
             client_id: clientId,
             source_url: window.location.href,
@@ -36,13 +33,10 @@
         });
 
         const beaconSent = navigator.sendBeacon("https://leadrecover.vercel.app/api/track", payload);
-        
         if (!beaconSent) {
             fetch("https://leadrecover.vercel.app/api/track", {
-                method: "POST",
-                body: payload,
-                keepalive: true
-            }).catch(e => console.error("LeadRecover Error:", e));
+                method: "POST", body: payload, keepalive: true
+            }).catch(e => console.error(e));
         }
     }
 
@@ -58,8 +52,6 @@
     }, true);
 
     document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'hidden') {
-            sendPayload();
-        }
+        if (document.visibilityState === 'hidden') sendPayload();
     });
 })();
