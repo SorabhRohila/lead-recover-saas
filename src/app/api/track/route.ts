@@ -64,10 +64,17 @@ export async function POST(req: Request) {
         .limit(10);
 
       // Let JavaScript find the matching session ID
+            // Let JavaScript find the matching session ID (Even if database stores it as text!)
       if (recentLeads) {
-        const match = recentLeads.find((lead: any) => 
-          lead.form_data && lead.form_data.lr_session_id === sessionId
-        );
+        const match = recentLeads.find((lead: any) => {
+          let fd = lead.form_data;
+          // If the database returns plain text, parse it into an object first
+          if (typeof fd === 'string') {
+            try { fd = JSON.parse(fd); } catch (e) {}
+          }
+          return fd && fd.lr_session_id === sessionId;
+        });
+
         if (match) {
           existingLeadId = match.id;
         }
