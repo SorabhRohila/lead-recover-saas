@@ -49,21 +49,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized website." }, { status: 403, headers: corsHeaders });
     }
 
-        // 3. Domains match! Smart Upsert Logic
+            // 3. Domains match! Bulletproof Upsert Logic
     const sessionId = data.lr_session_id;
     let existingLeadId = null;
 
-    // Check if this specific user session already started a lead
     if (sessionId) {
-      const { data: existing } = await supabase
+      // Fetch the most recent leads for this user manually
+      const { data: recentLeads } = await supabase
         .from('leads')
-        .select('id')
+        .select('id, form_data')
         .eq('user_id', client_id)
-        .contains('form_data', { lr_session_id: sessionId })
-        .single();
-        
-      if (existing) {
-        existingLeadId = existing.id;
+        .eq('source_url', source_url)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      // Let JavaScript find the matching session ID
+      if (recentLeads) {
+        const match = recentLeads.find((lead: any) => 
+          lead.form_data && lead.form_data.lr_session_id === sessionId
+        );
+        if (match) {
+          existingLeadId = match.id;
+        }
       }
     }
 
