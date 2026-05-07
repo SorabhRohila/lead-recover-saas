@@ -22,10 +22,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing data" }, { status: 400, headers: corsHeaders });
     }
 
-    const phone = data.phone || data.tel || data.phoneNumber || data.email || "Captured Lead";
+    const phone = data.phone || data.tel || data.phoneNumber || "Captured Lead";
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    // NEW: Try to use the Admin Key first!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // 1. Fetch the user's registered website URL
