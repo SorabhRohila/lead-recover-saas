@@ -1,23 +1,13 @@
 (function() {
     const currentScript = document.currentScript || document.querySelector('script[src*="lr.js"]');
     const clientId = currentScript ? currentScript.getAttribute('data-account') : null;
+    const sessionId = Date.now().toString() + Math.random().toString().substr(2);
     
     if (!clientId) return;
 
-    // Bulletproof check: If they ever submitted in this browser tab, never run this script again!
-    if (sessionStorage.getItem('lr_submitted_' + clientId) === 'true') {
-        return; 
-    }
-
-    let sessionId = sessionStorage.getItem('lr_session_' + clientId);
-    if (!sessionId) {
-        sessionId = Date.now().toString() + Math.random().toString().substr(2);
-        sessionStorage.setItem('lr_session_' + clientId, sessionId);
-    }
-
     let formData = {};
     let lastSentData = "";
-    let formHasBeenSubmitted = false;
+    let formHasBeenSubmitted = false; 
 
     function getSmartFieldName(el) {
         const nameAttr = (el.name || '').toLowerCase();
@@ -36,11 +26,22 @@
         return el.name || el.id || 'field_' + Math.random().toString(36).substr(2, 5);
     }
 
-    function sendPayload(isSubmit = false) {
-        if (Object.keys(formData).length === 0) return;
+    // Scrapes all inputs instantly (used right before submit)
+    function scrapeAllInputs() {
+        const inputs = document.querySelectorAll('input, textarea, select');
+        inputs.forEach(input => {
+            if (!['password', 'submit', 'button', 'hidden'].includes(input.type)) {
+                const val = input.value.trim();
+                if (val) formData[getSmartFieldName(input)] = val;
+            }
+        });
+    }
 
-        // If they already clicked submit earlier, completely ignore any new pings
+    function sendPayload(isSubmit = false) {
+        // If it was already locked from a submit, ignore any tab closures or blurs
         if (formHasBeenSubmitted && !isSubmit) return;
+
+        if (Object.keys(formData).length === 0) return;
 
         let hasName = false;
         let hasContact = false;
@@ -56,11 +57,9 @@
         let payloadData = Object.assign({}, formData);
         payloadData['lr_session_id'] = sessionId;
 
-        // If this is a submit action, lock the script and save it to browser storage
         if (isSubmit) {
             payloadData['is_submitted'] = true;
-            formHasBeenSubmitted = true;
-            sessionStorage.setItem('lr_submitted_' + clientId, 'true'); // Save to browser memory
+            formHasBeenSubmitted = true; // Lock the script for this page lifecycle
         }
         
         const currentDataString = JSON.stringify(payloadData);
@@ -81,32 +80,38 @@
         }
     }
 
+    // 1. Capture as they type and click away
     document.addEventListener('blur', function(e) {
+        if (formHasBeenSubmitted) return; // Don't run if already submitted
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
             const type = e.target.type;
             if (type === 'password' || type === 'submit' || type === 'button' || type === 'hidden') return;
 
-            const fieldName = getSmartFieldName(e.target);
             const value = e.target.value.trim();
-
             if (value.length > 0) {
-                formData[fieldName] = value;
+                formData[getSmartFieldName(e.target)] = value;
                 sendPayload();
             }
         }
     }, true);
 
+    // 2. Capture if they close the tab
     document.addEventListener('visibilitychange', function() {
+        if (formHasBeenSubmitted) return; // Don't run if already submitted
         if (document.visibilityState === 'hidden') sendPayload();
     });
 
+    // 3. Capture the actual submit
     document.addEventListener('submit', function(e) {
+        scrapeAllInputs(); // Force grab everything instantly
         sendPayload(true);
     }, true);
 
+    // 4. Capture the button click (for tricky WordPress forms)
     document.addEventListener('click', function(e) {
         const target = e.target;
         if (target.type === 'submit' || target.closest('button[type="submit"]') || target.closest('input[type="submit"]')) {
+            scrapeAllInputs(); // Force grab everything instantly
             sendPayload(true);
         }
     }, true);
