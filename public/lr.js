@@ -1,15 +1,23 @@
 (function() {
     const currentScript = document.currentScript || document.querySelector('script[src*="lr.js"]');
     const clientId = currentScript ? currentScript.getAttribute('data-account') : null;
-    const sessionId = Date.now().toString() + Math.random().toString().substr(2);
     
     if (!clientId) return;
 
+    // Bulletproof check: If they ever submitted in this browser tab, never run this script again!
+    if (sessionStorage.getItem('lr_submitted_' + clientId) === 'true') {
+        return; 
+    }
+
+    let sessionId = sessionStorage.getItem('lr_session_' + clientId);
+    if (!sessionId) {
+        sessionId = Date.now().toString() + Math.random().toString().substr(2);
+        sessionStorage.setItem('lr_session_' + clientId, sessionId);
+    }
+
     let formData = {};
     let lastSentData = "";
-    
-    // NEW: The Memory Lock. Once true, the script stops tracking them entirely.
-    let formHasBeenSubmitted = false; 
+    let formHasBeenSubmitted = false;
 
     function getSmartFieldName(el) {
         const nameAttr = (el.name || '').toLowerCase();
@@ -31,7 +39,7 @@
     function sendPayload(isSubmit = false) {
         if (Object.keys(formData).length === 0) return;
 
-        // If they already clicked submit earlier, NEVER send another payload (ignores tab closures)
+        // If they already clicked submit earlier, completely ignore any new pings
         if (formHasBeenSubmitted && !isSubmit) return;
 
         let hasName = false;
@@ -48,10 +56,11 @@
         let payloadData = Object.assign({}, formData);
         payloadData['lr_session_id'] = sessionId;
 
-        // If this is the submit click, add the flag and LOCK the script forever
+        // If this is a submit action, lock the script and save it to browser storage
         if (isSubmit) {
             payloadData['is_submitted'] = true;
-            formHasBeenSubmitted = true; // Lock engaged
+            formHasBeenSubmitted = true;
+            sessionStorage.setItem('lr_submitted_' + clientId, 'true'); // Save to browser memory
         }
         
         const currentDataString = JSON.stringify(payloadData);
