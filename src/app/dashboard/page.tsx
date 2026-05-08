@@ -16,6 +16,10 @@ export default function Dashboard() {
   const [sheetUrl, setSheetUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  
+  // NEW: Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  
   const router = useRouter();
 
   useEffect(() => {
@@ -28,8 +32,6 @@ export default function Dashboard() {
       if (pages) setActivePages(pages);
 
       const { data: userLeads } = await supabase.from("leads").select("*").eq("user_id", session.user.id).order("created_at", { ascending: false });
-      
-      // Load ALL leads so we can color-code them in the table
       if (userLeads) setLeads(userLeads);
       
       setLoading(false);
@@ -68,6 +70,55 @@ export default function Dashboard() {
     navigator.clipboard.writeText(scriptText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // NEW: Filter logic for the search bar
+  const filteredLeads = leads.filter((lead) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    
+    // Check phone and source url
+    if (lead.phone_number?.toLowerCase().includes(query)) return true;
+    if (lead.source_url?.toLowerCase().includes(query)) return true;
+    
+    // Check all captured fields (like name, email, etc.)
+    if (lead.form_data) {
+      return Object.values(lead.form_data).some(val => 
+        String(val).toLowerCase().includes(query)
+      );
+    }
+    return false;
+  });
+
+  // NEW: Export to Excel/CSV function
+  const exportToCSV = () => {
+    const headers = ["Status", "Date", "Time", "Phone", "Source Page", "Captured Fields"];
+    const csvRows = [headers.join(",")];
+
+    filteredLeads.forEach(lead => {
+      const status = lead.form_data?.is_submitted ? "Converted" : "Abandoned";
+      const date = new Date(lead.created_at).toLocaleDateString();
+      const time = new Date(lead.created_at).toLocaleTimeString([], {timeStyle: 'short'});
+      const phone = lead.phone_number || "N/A";
+      const source = lead.source_url || "Unknown";
+      
+      // Format the JSON data into a readable string
+      const fields = Object.entries(lead.form_data || {})
+        .filter(([k]) => k !== 'is_submitted')
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(" | ");
+
+      // Escape commas and quotes for CSV format
+      const escape = (str: string) => `"${String(str).replace(/"/g, '""')}"`;
+      csvRows.push([status, date, time, phone, source, fields].map(escape).join(","));
+    });
+
+    const blob = new Blob([csvRows.join("\\n")], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `LeadRecover_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    a.click();
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA] text-sm text-zinc-500 font-sans">Loading workspace...</div>;
@@ -145,7 +196,6 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
             {/* Tracking Script Box */}
             <div className="bg-white p-6 rounded-2xl border border-zinc-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col justify-between">
               <div>
@@ -195,17 +245,50 @@ export default function Dashboard() {
 
         {/* Data Table */}
         <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden">
-          <div className="px-6 py-5 border-b border-zinc-100 flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-zinc-900">Lead Database</h2>
-            <div className="flex gap-2">
-              <span className="text-[10px] font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md border border-red-100">Abandoned</span>
-              <span className="text-[10px] font-medium bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md border border-emerald-100">Converted</span>
+          
+          {/* Table Header area with Search and Export */}
+          <div className="px-6 py-4 border-b border-zinc-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-zinc-900">Lead Database</h2>
+              <div className="flex gap-2">
+                <span className="text-[10px] font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md border border-red-100">Abandoned</span>
+                <span className="text-[10px] font-medium bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md border border-emerald-100">Converted</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              {/* Search Bar */}
+              <div className="relative w-full md:w-64">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input 
+                  type="text" 
+                  placeholder="Search email, phone, name..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs border border-zinc-200 rounded-lg focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
+                />
+              </div>
+
+              {/* Export Button */}
+              <button 
+                onClick={exportToCSV} 
+                className="whitespace-nowrap px-4 py-2 text-xs font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors flex items-center gap-1.5 shadow-sm"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Export CSV
+              </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-zinc-50/50">
+
+          {/* NEW: Scrollable Table Container */}
+          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+            <table className="w-full text-left border-collapse relative">
+              <thead className="sticky top-0 z-10 bg-zinc-50/95 backdrop-blur-sm shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                <tr>
                   <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Status</th>
                   <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Date Captured</th>
                   <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Phone Number</th>
@@ -214,14 +297,14 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {leads.length === 0 ? (
+                {filteredLeads.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-sm text-zinc-500">
-                      Waiting for your first form interaction...
+                      {searchQuery ? "No leads found matching your search." : "Waiting for your first form interaction..."}
                     </td>
                   </tr>
                 ) : (
-                  leads.map((lead) => {
+                  filteredLeads.map((lead) => {
                     const isSubmitted = lead.form_data?.is_submitted === true;
 
                     return (
