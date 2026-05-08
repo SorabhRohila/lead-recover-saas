@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
+    useEffect(() => {
     async function loadDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return router.push("/login");
@@ -28,7 +28,13 @@ export default function Dashboard() {
       if (pages) setActivePages(pages);
 
       const { data: userLeads } = await supabase.from("leads").select("*").eq("user_id", session.user.id).order("created_at", { ascending: false });
-      if (userLeads) setLeads(userLeads);
+      
+      if (userLeads) {
+        // NEW: Filter out any leads that were actually submitted
+        const abandonedLeads = userLeads.filter(lead => !lead.form_data?.is_submitted);
+        setLeads(abandonedLeads);
+      }
+      
       setLoading(false);
     }
     loadDashboard();
