@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
-    useEffect(() => {
+  useEffect(() => {
     async function loadDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return router.push("/login");
@@ -29,11 +29,8 @@ export default function Dashboard() {
 
       const { data: userLeads } = await supabase.from("leads").select("*").eq("user_id", session.user.id).order("created_at", { ascending: false });
       
-      if (userLeads) {
-        // NEW: Filter out any leads that were actually submitted
-        const abandonedLeads = userLeads.filter(lead => !lead.form_data?.is_submitted);
-        setLeads(abandonedLeads);
-      }
+      // Load ALL leads so we can color-code them in the table
+      if (userLeads) setLeads(userLeads);
       
       setLoading(false);
     }
@@ -66,7 +63,7 @@ export default function Dashboard() {
     router.push("/login");
   };
 
-    const copyScript = () => {
+  const copyScript = () => {
     const scriptText = `<script src="${window.location.origin}/lr.js" data-account="${user?.id}" defer></script>`;
     navigator.clipboard.writeText(scriptText);
     setCopied(true);
@@ -200,12 +197,16 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="px-6 py-5 border-b border-zinc-100 flex justify-between items-center">
             <h2 className="text-sm font-semibold text-zinc-900">Lead Database</h2>
-            <span className="text-xs text-zinc-500 font-medium bg-zinc-100 px-2.5 py-1 rounded-full">Real-time</span>
+            <div className="flex gap-2">
+              <span className="text-[10px] font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md border border-red-100">Abandoned</span>
+              <span className="text-[10px] font-medium bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md border border-emerald-100">Converted</span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-zinc-50/50">
+                  <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Status</th>
                   <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Date Captured</th>
                   <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Phone Number</th>
                   <th className="px-6 py-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-100">Source Page</th>
@@ -215,33 +216,57 @@ export default function Dashboard() {
               <tbody className="divide-y divide-zinc-100">
                 {leads.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-sm text-zinc-500">
-                      Waiting for your first form abandonment...
+                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-zinc-500">
+                      Waiting for your first form interaction...
                     </td>
                   </tr>
                 ) : (
-                  leads.map((lead) => (
-                    <tr key={lead.id} className="hover:bg-zinc-50/50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
-                        {new Date(lead.created_at).toLocaleDateString()} <span className="text-zinc-400 text-xs ml-1">{new Date(lead.created_at).toLocaleTimeString([], {timeStyle: 'short'})}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">
-                        {lead.phone_number}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-zinc-500 truncate max-w-[150px]" title={lead.source_url}>
-                        {lead.source_url ? new URL(lead.source_url).pathname : "Unknown"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-zinc-600">
-                        <div className="flex gap-1.5 flex-wrap">
-                          {Object.entries(lead.form_data || {}).map(([key, value]: any) => (
-                            <span key={key} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-100 text-zinc-700 border border-zinc-200/60">
-                              <span className="text-zinc-400 mr-1">{key}:</span> <span className="truncate max-w-[100px]">{value}</span>
+                  leads.map((lead) => {
+                    const isSubmitted = lead.form_data?.is_submitted === true;
+
+                    return (
+                      <tr key={lead.id} className={`transition-colors ${isSubmitted ? 'bg-emerald-50/30 hover:bg-emerald-50/50' : 'hover:bg-zinc-50/50'}`}>
+                        
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isSubmitted ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Converted
                             </span>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-red-100 text-red-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Abandoned
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
+                          {new Date(lead.created_at).toLocaleDateString()} <span className="text-zinc-400 text-xs ml-1">{new Date(lead.created_at).toLocaleTimeString([], {timeStyle: 'short'})}</span>
+                        </td>
+                        
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">
+                          {lead.phone_number || "N/A"}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-zinc-500 truncate max-w-[150px]" title={lead.source_url}>
+                          {lead.source_url ? new URL(lead.source_url).pathname : "Unknown"}
+                        </td>
+                        
+                        <td className="px-6 py-4 text-sm text-zinc-600">
+                          <div className="flex gap-1.5 flex-wrap">
+                            {Object.entries(lead.form_data || {})
+                              .filter(([key]) => key !== 'is_submitted')
+                              .map(([key, value]: any) => (
+                              <span key={key} className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${isSubmitted ? 'bg-white text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-700 border-zinc-200/60'}`}>
+                                <span className={isSubmitted ? "text-emerald-400 mr-1" : "text-zinc-400 mr-1"}>{key}:</span> 
+                                <span className="truncate max-w-[100px]">{value}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
