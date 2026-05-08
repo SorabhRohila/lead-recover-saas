@@ -8,7 +8,6 @@
     let formData = {};
     let lastSentData = "";
 
-    // --- NEW: Universal Smart Scanner ---
     function getSmartFieldName(el) {
         const nameAttr = (el.name || '').toLowerCase();
         const idAttr = (el.id || '').toLowerCase();
@@ -16,7 +15,6 @@
         const placeAttr = (el.placeholder || '').toLowerCase();
         const autoAttr = (el.autocomplete || '').toLowerCase();
 
-        // Combine all hints into one string to scan
         const hints = nameAttr + " " + idAttr + " " + typeAttr + " " + placeAttr + " " + autoAttr;
 
         if (hints.includes('email')) return 'email';
@@ -24,11 +22,11 @@
         if (hints.includes('name') || hints.includes('first') || hints.includes('last') || hints.includes('fname')) return 'name';
         if (hints.includes('company') || hints.includes('business')) return 'company';
 
-        // Fallback
         return el.name || el.id || 'field_' + Math.random().toString(36).substr(2, 5);
     }
 
-    function sendPayload() {
+    // isSubmit parameter added to know if they clicked the submit button
+    function sendPayload(isSubmit = false) {
         if (Object.keys(formData).length === 0) return;
 
         let hasName = false;
@@ -40,17 +38,20 @@
             if (k.includes('phone') || k.includes('tel') || k.includes('email') || k.includes('number')) hasContact = true;
         }
 
-        if (!hasName || !hasContact) return; 
+        // Must have BOTH a name AND contact info, UNLESS we are sending a submit cancellation
+        if (!isSubmit && (!hasName || !hasContact)) return; 
         
-        // Copy formData so we don't mess up the loop
         let payloadData = Object.assign({}, formData);
         payloadData['lr_session_id'] = sessionId;
+
+        // If they click submit, add this flag to tell the DB to ignore this lead
+        if (isSubmit) {
+            payloadData['is_submitted'] = true;
+        }
         
-        // --- PREVENT RACE CONDITION ---
         const currentDataString = JSON.stringify(payloadData);
-        if (currentDataString === lastSentData) return;
+        if (!isSubmit && currentDataString === lastSentData) return;
         lastSentData = currentDataString;
-        // ------------------------------
 
         const payload = JSON.stringify({
             client_id: clientId,
@@ -66,15 +67,11 @@
         }
     }
 
-    // Listens for when a user clicks outside of an input (blur)
     document.addEventListener('blur', function(e) {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-            
-            // Ignore useless fields like passwords and submit buttons
             const type = e.target.type;
             if (type === 'password' || type === 'submit' || type === 'button' || type === 'hidden') return;
 
-            // Use the Smart Scanner to find the true name
             const fieldName = getSmartFieldName(e.target);
             const value = e.target.value.trim();
 
@@ -88,4 +85,10 @@
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'hidden') sendPayload();
     });
+
+    // NEW: Listen for actual form submission
+    document.addEventListener('submit', function(e) {
+        sendPayload(true); // Force send the payload with the is_submitted flag
+    }, true);
+
 })();
