@@ -7,6 +7,9 @@
 
     let formData = {};
     let lastSentData = "";
+    
+    // NEW: The Memory Lock. Once true, the script stops tracking them entirely.
+    let formHasBeenSubmitted = false; 
 
     function getSmartFieldName(el) {
         const nameAttr = (el.name || '').toLowerCase();
@@ -25,9 +28,11 @@
         return el.name || el.id || 'field_' + Math.random().toString(36).substr(2, 5);
     }
 
-    // isSubmit parameter added to know if they clicked the submit button
     function sendPayload(isSubmit = false) {
         if (Object.keys(formData).length === 0) return;
+
+        // If they already clicked submit earlier, NEVER send another payload (ignores tab closures)
+        if (formHasBeenSubmitted && !isSubmit) return;
 
         let hasName = false;
         let hasContact = false;
@@ -38,15 +43,15 @@
             if (k.includes('phone') || k.includes('tel') || k.includes('email') || k.includes('number')) hasContact = true;
         }
 
-        // Must have BOTH a name AND contact info, UNLESS we are sending a submit cancellation
         if (!isSubmit && (!hasName || !hasContact)) return; 
         
         let payloadData = Object.assign({}, formData);
         payloadData['lr_session_id'] = sessionId;
 
-        // If they click submit, add this flag to tell the DB to ignore this lead
+        // If this is the submit click, add the flag and LOCK the script forever
         if (isSubmit) {
             payloadData['is_submitted'] = true;
+            formHasBeenSubmitted = true; // Lock engaged
         }
         
         const currentDataString = JSON.stringify(payloadData);
@@ -86,15 +91,12 @@
         if (document.visibilityState === 'hidden') sendPayload();
     });
 
-        // NEW: Listen for actual form submission AND button clicks
     document.addEventListener('submit', function(e) {
         sendPayload(true);
     }, true);
 
-    // BACKUP: If they click ANY submit button, fire instantly before the page reloads
     document.addEventListener('click', function(e) {
         const target = e.target;
-        // Check if they clicked a submit button or something inside a submit button
         if (target.type === 'submit' || target.closest('button[type="submit"]') || target.closest('input[type="submit"]')) {
             sendPayload(true);
         }
